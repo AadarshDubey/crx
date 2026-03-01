@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 10 10 10;
+    --foreground: 255 255 255;
+  }
+
+  body {
+    @apply bg-background text-text-primary antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Futuristic Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full hover:bg-primary transition-colors duration-300;
+  }
+}
+
+@layer components {
+
+  /* Glassmorphism Cards */
+  .glass-panel {
+    @apply bg-surface/30 backdrop-blur-md border border-white/10 shadow-glass;
+  }
+
+  .glass-panel-hover {
+    @apply hover:border-white/20 hover:bg-surface/40 transition-all duration-300;
+  }
+
+  /* Neon Borders */
+  .border-glow-bullish {
+    box-shadow: 0 0 5px theme('colors.bullish'), inset 0 0 5px theme('colors.bullish');
+  }
+
+  /* Text Gradients */
+  .text-gradient-bullish {
+    @apply bg-gradient-bullish bg-clip-text text-transparent;
+  }
+
+  .text-gradient-bearish {
+    @apply bg-gradient-bearish bg-clip-text text-transparent;
+  }
+
+  .text-gradient-neutral {
+    @apply bg-gradient-neutral bg-clip-text text-transparent;
+  }
+}
+
+@layer utilities {
+  .text-shadow {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  }
+
+  .text-glow {
+    text-shadow: 0 0 10px currentColor;
+  }
+}
+
+/* Skeleton shimmer animation */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
