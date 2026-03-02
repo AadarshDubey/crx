@@ -1,6 +1,7 @@
 from typing import Optional, List
 from openai import AsyncOpenAI
 from pydantic import BaseModel
+import json
 
 from app.config import settings
 
@@ -84,7 +85,6 @@ Respond with a JSON object:
                 max_tokens=200,
             )
             
-            import json
             result = json.loads(response.choices[0].message.content)
             
             return SentimentResult(

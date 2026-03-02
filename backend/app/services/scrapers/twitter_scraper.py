@@ -1,11 +1,7 @@
 from typing import List, Optional
 from datetime import datetime, timedelta
 import httpx
-from bs4 import BeautifulSoup
 import asyncio
-import re
-import random
-import hashlib
 
 from app.services.scrapers.base_scraper import BaseScraper, ScrapedItem
 from app.config import settings

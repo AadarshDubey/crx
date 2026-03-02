@@ -12,6 +12,7 @@ from app.services.scrapers.twitter_scraper import TwitterScraper
 from app.services.ai.embeddings import embedding_service
 from app.database.vector_store import get_vector_store
 from app.services.cache import cache
+from app.utils.helpers import extract_tickers
 
 router = APIRouter()
 
@@ -420,7 +421,7 @@ async def scrape_single_account(
         tweets_stored = 0
         for item in scraped_items:
             # Check if tweet already exists
-            existing = await db.execute(select(Tweet).where(Tweet.id == item.id))
+            existing = await db.execute(select(Tweet.id).where(Tweet.id == item.id))
             if existing.scalar_one_or_none():
                 continue
             
@@ -572,7 +573,7 @@ async def scrape_tweets(
         
         for item in filtered_items:
             # Check if tweet already exists
-            existing = await db.execute(select(Tweet).where(Tweet.id == item.id))
+            existing = await db.execute(select(Tweet.id).where(Tweet.id == item.id))
             if existing.scalar_one_or_none():
                 continue
             
@@ -876,7 +877,6 @@ async def get_coin_mentions_analytics(
     time_range: str = Query("7d", description="Time range: 24h, 7d, 30d"),
 ):
     """Get most mentioned coins from tweet content."""
-    import re
     
     time_deltas = {
         "24h": timedelta(hours=24),
@@ -896,13 +896,12 @@ async def get_coin_mentions_analytics(
     tweets = result.all()
     
     # Extract coin mentions ($BTC, $ETH, etc.)
-    coin_pattern = r'\$([A-Z]{2,10})'
     coin_counts = {}
     
     for tweet in tweets:
         if tweet.content:
-            matches = re.findall(coin_pattern, tweet.content.upper())
-            for coin in matches:
+            tickers = extract_tickers(tweet.content)
+            for coin in tickers:
                 coin_counts[coin] = coin_counts.get(coin, 0) + 1
     
     # Sort by count and get top coins

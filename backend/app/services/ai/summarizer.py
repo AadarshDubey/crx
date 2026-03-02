@@ -1,6 +1,7 @@
 from typing import List, Optional
 from openai import AsyncOpenAI
 from pydantic import BaseModel
+import json
 
 from app.config import settings
 
@@ -94,7 +95,6 @@ Respond with JSON:
                 max_tokens=500,
             )
             
-            import json
             result = json.loads(response.choices[0].message.content)
             
             return Summary(
@@ -166,7 +166,6 @@ Respond with JSON:
                 max_tokens=600,
             )
             
-            import json
             result = json.loads(response.choices[0].message.content)
             
             return Summary(

@@ -5,6 +5,7 @@ from typing import Optional, List, Tuple, Any
 from datetime import datetime
 import json
 import asyncio
+import traceback
 
 from app.config import settings
 from app.services.ai.rag_chain import rag_chain
@@ -200,7 +201,7 @@ async def chat_stream(request: ChatRequest):
                                     for item in scraped_items[:15]:
                                         # Check if tweet already exists
                                         existing = await db.execute(
-                                            select(Tweet).where(Tweet.id == item.id)
+                                            select(Tweet.id).where(Tweet.id == item.id)
                                         )
                                         if existing.scalar_one_or_none():
                                             continue
@@ -370,7 +371,6 @@ Please provide a comprehensive analysis based on these fresh tweets. Start with 
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
             
         except Exception as e:
-            import traceback
             error_detail = traceback.format_exc()
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"

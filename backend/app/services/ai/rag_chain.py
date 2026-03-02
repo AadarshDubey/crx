@@ -784,7 +784,6 @@ Respond in JSON format."""
                 temperature=0.5,
             )
             
-            import json
             return json.loads(response.choices[0].message.content)
             
         except Exception as e:

@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
 from typing import Optional
 from datetime import datetime
+import traceback
 
 from app.database.connection import get_db
 from app.models.news import NewsArticle
@@ -177,7 +178,7 @@ async def scrape_news(
             for item in items:
                 # Check if article already exists (by URL or ID)
                 existing = await db.execute(
-                    select(NewsArticle).where(NewsArticle.url == item.url)
+                    select(NewsArticle.id).where(NewsArticle.url == item.url)
                 )
                 if existing.scalar_one_or_none():
                     continue  # Skip duplicates
@@ -259,7 +260,6 @@ async def scrape_news(
                 
             except Exception as e:
                 # Log the error - include it in response for debugging
-                import traceback
                 print(f"Warning: Failed to store embeddings: {e}")
                 traceback.print_exc()
                 embedding_error = str(e)
@@ -277,6 +277,5 @@ async def scrape_news(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

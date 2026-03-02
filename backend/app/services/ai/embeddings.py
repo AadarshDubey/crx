@@ -1,20 +1,25 @@
 from typing import List, Optional
 from sentence_transformers import SentenceTransformer
 
-from app.config import settings
-
 
 class EmbeddingService:
     """
     Generate embeddings for semantic search and RAG.
     
     Uses local sentence-transformers model (free, no API needed).
+    Model is lazy-loaded on first use to speed up app startup.
     """
     
     def __init__(self):
-        # Use a small, fast model - runs locally, no API key needed
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self._model = None
         self.dimensions = 384  # all-MiniLM-L6-v2 dimension
+    
+    @property
+    def model(self):
+        """Lazy-load the SentenceTransformer model on first access."""
+        if self._model is None:
+            self._model = SentenceTransformer('all-MiniLM-L6-v2')
+        return self._model
     
     async def embed(self, text: str) -> List[float]:
         """

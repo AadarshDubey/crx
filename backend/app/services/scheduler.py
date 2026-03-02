@@ -12,7 +12,6 @@ from app.models.news import NewsArticle
 from app.services.scrapers.twitter_scraper import TwitterScraper
 from app.services.scrapers.news_scraper import NewsScraper
 from app.services.ai.sentiment import sentiment_analyzer
-from app.services.ai.embeddings import embedding_service
 from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
@@ -148,7 +147,7 @@ class ScraperScheduler:
                             
                             # Check if tweet already exists
                             existing = await db.execute(
-                                select(Tweet).where(Tweet.id == tweet_id)
+                                select(Tweet.id).where(Tweet.id == tweet_id)
                             )
                             if existing.scalar_one_or_none():
                                 continue
@@ -214,7 +213,7 @@ class ScraperScheduler:
                         for item in items:
                             # Check if article already exists by URL
                             existing = await db.execute(
-                                select(NewsArticle).where(NewsArticle.url == item.url)
+                                select(NewsArticle.id).where(NewsArticle.url == item.url)
                             )
                             if existing.scalar_one_or_none():
                                 continue

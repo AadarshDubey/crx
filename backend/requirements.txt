@@ -9,9 +9,8 @@ sqlalchemy==2.0.25
 asyncpg==0.29.0
 alembic==1.13.1
 
-# Caching & Task Queue
+# Caching
 redis==5.0.1
-celery==5.3.6
 
 # HTTP & Scraping
 httpx==0.26.0
@@ -21,7 +20,8 @@ lxml==5.1.0
 
 # AI & ML
 openai==1.10.0
-tiktoken==0.5.2
+groq>=0.4.0
+sentence-transformers>=2.2.0
 
 # Vector Databases
 chromadb==0.4.22
