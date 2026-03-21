@@ -140,7 +140,9 @@ async def chat_stream(request: ChatRequest):
             scraped_any = False
             if mentioned_accounts:
                 handles = [acc["handle"].lstrip("@") for acc in mentioned_accounts]
-                yield f"data: {json.dumps({'type': 'status', 'message': f'Detected accounts: {", ".join(["@" + h for h in handles])}'})}\n\n"
+                accounts_str = ", ".join(["@" + h for h in handles])
+                msg = f"Detected accounts: {accounts_str}"
+                yield f"data: {json.dumps({'type': 'status', 'message': msg})}\n\n"
                 await asyncio.sleep(0.2)
                 
                 # Step 2: Ensure accounts are in tracking list
