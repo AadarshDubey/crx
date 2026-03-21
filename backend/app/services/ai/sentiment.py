@@ -46,7 +46,8 @@ Respond with a JSON object:
             self.client = AsyncGroq(api_key=settings.GROQ_API_KEY)
             self.model = settings.GROQ_MODEL
         else:
-            self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            # Fallback to a dummy key during tests if the env var isn't picked up
+            self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY or "dummy_key_for_testing")
             self.model = settings.OPENAI_MODEL
     
     async def analyze(self, text: str) -> SentimentResult:
