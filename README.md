@@ -1,5 +1,8 @@
 # 🚀 Crypto Pulse
 
+[![CI/CD Pipeline](https://github.com/AadarshDubey/crx/actions/workflows/ci.yml/badge.svg)](https://github.com/AadarshDubey/crx/actions/workflows/ci.yml)
+[![Docker Support](https://img.shields.io/badge/docker-%230db7ed.svg?style=flat&logo=docker&logoColor=white)](#-run-with-docker-recommended)
+
 **AI-powered crypto news and sentiment aggregator** — Never miss market-moving information again.
 
 Crypto Pulse scrapes Twitter/X accounts and news sources you care about, analyzes sentiment using AI, and lets you query the data through natural language.
@@ -12,6 +15,8 @@ Crypto Pulse scrapes Twitter/X accounts and news sources you care about, analyze
 - **Semantic Search**: Find relevant content using natural language queries
 - **RAG-powered Chat**: Ask questions about market conditions and get AI answers with sources
 - **Real-time Dashboard**: Beautiful UI to monitor everything
+- **🐳 Dockerized Integration**: Fully containerized environment using Docker & Docker Compose
+- **🔄 CI/CD Pipeline**: Automated testing and CI/CD workflows building Docker images via GitHub Actions
 
 ## 🏗️ Architecture
 
@@ -39,15 +44,42 @@ Crypto Pulse scrapes Twitter/X accounts and news sources you care about, analyze
 
 ### Prerequisites
 
-- Python 3.11+
+- **Docker & Docker Compose** (Recommended)
+- **Python 3.11+** and **Node.js 20+** (For local development)
+- **An LLM API key** (OpenAI or Groq)
 
-For running locally (no Docker):
+---
 
-- PostgreSQL (running locally)
-- Redis (running locally)
-- An LLM API key (OpenAI or Groq)
+### 🐳 Run with Docker (Recommended)
 
-### Local Development (Backend + Frontend)
+The easiest way to get the entire stack (Postgres, Redis, Backend, Frontend) running is via Docker.
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/AadarshDubey/crx.git
+   cd crx
+   ```
+
+2. **Set up Environment Variables:**
+   Create a `.env.docker` file in the root directory:
+   ```env
+   OPENAI_API_KEY=your_openai_api_key
+   # GROQ_API_KEY=your_groq_api_key (optional)
+   ```
+
+3. **Start the services:**
+   ```bash
+   docker-compose up -d --build
+   ```
+
+4. **Access the application:**
+   - **Frontend UI:** http://localhost:3000
+   - **Backend API:** http://localhost:8000
+   - **API Docs:** http://localhost:8000/docs
+
+---
+
+### 💻 Local Development (Backend + Frontend)
 
 This repo is structured as a single project with:
 
@@ -188,6 +220,12 @@ POST /api/tweets/accounts
 
 Categories: `influencer`, `analyst`, `project`, `news`, `whale`, `developer`, `exchange`, `vc`, `general`
 
+## 🤖 CI/CD & Deployment
+
+This project utilizes **GitHub Actions** for robust continuous integration and delivery:
+- **Automated Testing:** Runs `pytest` on the backend and `vitest` on the frontend on every push or PR.
+- **Docker Image Builds:** Automatically builds production-ready backend and frontend images and pushes them to the **GitHub Container Registry (GHCR)**.
+
 ## 🛣️ Roadmap
 
 - [x] Backend API structure
@@ -196,7 +234,8 @@ Categories: `influencer`, `analyst`, `project`, `news`, `whale`, `developer`, `e
 - [x] Sentiment analysis
 - [x] Vector store integration
 - [x] RAG chat
-- [ ] Frontend (Next.js)
+- [x] Frontend UI (Next.js)
+- [x] Dockerization & CI/CD Pipeline
 - [ ] Real-time WebSocket updates
 - [ ] Price alerts integration
 - [ ] Telegram/Discord notifications
