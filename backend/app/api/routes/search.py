@@ -32,22 +32,54 @@ async def search(
     
     Supports case-insensitive keyword search.
     """
-    # Build search query - search in content, author_handle, and author_name
+    # Build search query
     search_term = f"%{q}%"
     
-    query = select(Tweet).where(
-        or_(
-            Tweet.content.ilike(search_term),
-            Tweet.author_handle.ilike(search_term),
-            Tweet.author_name.ilike(search_term),
-        )
-    ).order_by(desc(Tweet.tweet_created_at)).limit(limit)
+    results_list = []
     
-    result = await db.execute(query)
-    tweets = result.scalars().all()
+    # Search Tweets if type is not strictly 'news'
+    if type != "news":
+        tweet_query = select(Tweet).where(
+            or_(
+                Tweet.content.ilike(search_term),
+                Tweet.author_handle.ilike(search_term),
+                Tweet.author_name.ilike(search_term),
+            )
+        ).order_by(desc(Tweet.tweet_created_at)).limit(limit)
+        tweet_result = await db.execute(tweet_query)
+        tweets = tweet_result.scalars().all()
+        results_list.extend([tweet.to_dict() for tweet in tweets])
+        
+    # Search News if type is 'news' or 'all' or not specified
+    from app.models.news import NewsArticle
+    if type in ["news", "all"] or type is None:
+        news_query = select(NewsArticle).where(
+            or_(
+                NewsArticle.title.ilike(search_term),
+                NewsArticle.content.ilike(search_term),
+                NewsArticle.source_name.ilike(search_term),
+            )
+        ).order_by(desc(NewsArticle.published_at)).limit(limit)
+        news_result = await db.execute(news_query)
+        news_articles = news_result.scalars().all()
+        for article in news_articles:
+            article_dict = article.to_dict()
+            article_dict["type"] = "news"  # Explicitly label for frontend
+            results_list.append(article_dict)
     
-    # Return tweets as list (frontend expects Tweet[] format)
-    return [tweet.to_dict() for tweet in tweets]
+    # Sort combined results by date (newest first)
+    # We use tweet_created_at for tweets and published_at for news
+    def get_date(item):
+        if "tweet_created_at" in item:
+            return item["tweet_created_at"]
+        elif "published_at" in item:
+            return item["published_at"]
+        return ""
+    
+    results_list.sort(key=get_date, reverse=True)
+    
+    # Return limited list
+    return results_list[:limit]
 
 
 @router.post("/semantic")

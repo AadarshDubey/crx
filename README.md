@@ -111,7 +111,7 @@ pip install -r requirements.txt
 #   REDIS_URL=redis://localhost:6379/0
 
 # Run the server
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload
 
 # API: http://localhost:8000
 # Docs: http://localhost:8000/docs

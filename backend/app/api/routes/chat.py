@@ -12,6 +12,7 @@ from app.services.ai.rag_chain import rag_chain
 from app.services.scrapers.twitter_scraper import TwitterScraper
 from app.database.connection import async_session
 from app.models.tweet import Tweet
+from app.models.news import NewsArticle
 from app.models.account import TrackedAccount
 from app.services.ai.embeddings import embedding_service
 from app.services.ai.sentiment import sentiment_analyzer
@@ -165,9 +166,41 @@ async def chat_stream(request: ChatRequest):
                             yield f"data: {json.dumps({'type': 'status', 'message': f'Added @{handle} to tracking list'})}\n\n"
                             await asyncio.sleep(0.1)
                 
-                # Step 3: Scrape fresh data for each account
+                # Step 3: Scrape fresh data for each account (with cooldown)
+                from datetime import timedelta
+                CHAT_SCRAPE_COOLDOWN_MINUTES = 10
+                
                 for acc in mentioned_accounts:
                     handle = acc["handle"].lstrip("@")
+                    
+                    # Component 7: Check scrape cooldown — skip if scraped recently
+                    should_scrape = True
+                    async with async_session() as db:
+                        acct_result = await db.execute(
+                            select(TrackedAccount).where(TrackedAccount.handle == handle)
+                        )
+                        tracked = acct_result.scalar_one_or_none()
+                        if tracked and tracked.last_scraped_at:
+                            age_minutes = (datetime.utcnow() - tracked.last_scraped_at).total_seconds() / 60
+                            if age_minutes < CHAT_SCRAPE_COOLDOWN_MINUTES:
+                                should_scrape = False
+                                yield f"data: {json.dumps({'type': 'status', 'message': f'Using cached data for @{handle} (scraped {int(age_minutes)}m ago)'})}\n\n"
+                                
+                                # Load recent tweets from DB as context
+                                db_tweets = await db.execute(
+                                    select(Tweet).where(Tweet.author_handle == handle)
+                                    .order_by(Tweet.tweet_created_at.desc()).limit(10)
+                                )
+                                for tweet in db_tweets.scalars().all():
+                                    fresh_tweets_context.append({
+                                        "handle": handle,
+                                        "content": tweet.content,
+                                        "created_at": tweet.tweet_created_at.isoformat() if tweet.tweet_created_at else "Unknown",
+                                        "url": tweet.url or f"https://twitter.com/{handle}/status/{tweet.id}",
+                                    })
+                    
+                    if not should_scrape:
+                        continue
                     
                     yield f"data: {json.dumps({'type': 'status', 'message': f'Fetching latest tweets from @{handle}...'})}\n\n"
                     
@@ -200,12 +233,15 @@ async def chat_stream(request: ChatRequest):
                                     vector_store = get_vector_store()
                                     stored_count = 0
                                     
-                                    for item in scraped_items[:15]:
+                                    # Pre-fetch existing tweet IDs to avoid N+1 queries
+                                    items_to_check = scraped_items[:15]
+                                    item_ids = [item.id for item in items_to_check]
+                                    existing_result = await db.execute(select(Tweet.id).where(Tweet.id.in_(item_ids)))
+                                    existing_ids = set(existing_result.scalars().all())
+
+                                    for item in items_to_check:
                                         # Check if tweet already exists
-                                        existing = await db.execute(
-                                            select(Tweet.id).where(Tweet.id == item.id)
-                                        )
-                                        if existing.scalar_one_or_none():
+                                        if item.id in existing_ids:
                                             continue
                                         
                                         # Analyze sentiment
@@ -234,17 +270,18 @@ async def chat_stream(request: ChatRequest):
                                         # Store embedding
                                         try:
                                             embedding = await embedding_service.embed_for_storage(item.content)
-                                            await vector_store.add_documents( # Added await here
-                                                documents=[item.content],
+                                            doc_dict = {
+                                                "content": item.content,
+                                                "id": item.id,
+                                                "source": f"@{handle}",
+                                                "source_type": "tweet",
+                                                "url": item.url,
+                                                "created_at": item.created_at.isoformat() if item.created_at else "",
+                                                "sentiment": sentiment_result.get("label", "neutral"),
+                                            }
+                                            await vector_store.add_documents(
+                                                documents=[doc_dict],
                                                 embeddings=[embedding],
-                                                metadatas=[{
-                                                    "id": item.id,
-                                                    "source": f"@{handle}",
-                                                    "source_type": "tweet",
-                                                    "url": item.url,
-                                                    "created_at": item.created_at.isoformat() if item.created_at else "",
-                                                    "sentiment": sentiment_result.get("label", "neutral"),
-                                                }],
                                                 ids=[item.id],
                                             )
                                             stored_count += 1
@@ -311,22 +348,18 @@ Please provide a comprehensive analysis based on these fresh tweets. Start with 
                         messages.append({"role": msg.role, "content": msg.content})
                 messages.append({"role": "user", "content": user_prompt})
 
-                response = await client.chat.completions.create(
+                stream = await client.chat.completions.create(
                     model=model,
                     messages=messages,
                     max_tokens=1500,
                     temperature=0.7,
+                    stream=True,
                 )
                 
-                answer = response.choices[0].message.content
-                
-                # Stream the response
-                words = answer.split(' ')
-                chunk_size = 3
-                for i in range(0, len(words), chunk_size):
-                    chunk = ' '.join(words[i:i+chunk_size]) + ' '
-                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-                    await asyncio.sleep(0.03)
+                async for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        content_piece = chunk.choices[0].delta.content
+                        yield f"data: {json.dumps({'type': 'chunk', 'content': content_piece})}\n\n"
                 
                 # Send sources from fresh tweets
                 sources = [
@@ -340,34 +373,57 @@ Please provide a comprehensive analysis based on these fresh tweets. Start with 
                 ]
                 yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
             else:
-                # Fall back to RAG if no fresh tweets
-                result = await rag_chain.query(
+                # Fetch latest news from the news table to provide context for general queries
+                yield f"data: {json.dumps({'type': 'status', 'message': 'Fetching latest news...'})}\n\n"
+                await asyncio.sleep(0.1)
+                
+                try:
+                    # Removed hardcoded SQL keyword fallback to rely strictly on Vector DB semantic search
+                    context_str = None
+                    injected_sources = []
+                except Exception as e:
+                    print(f"Error fetching news context: {e}")
+                    context_str = None
+                    injected_sources = []
+
+                # Fall back to RAG
+                result_stream = rag_chain.stream_query(
                     question=question,
                     conversation_history=[
                         {"role": msg.role, "content": msg.content}
                         for msg in (request.conversation_history or [])
                     ],
+                    injected_context=context_str
                 )
                 
-                # Stream the response
-                words = result.answer.split(' ')
-                chunk_size = 3
-                for i in range(0, len(words), chunk_size):
-                    chunk = ' '.join(words[i:i+chunk_size]) + ' '
-                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-                    await asyncio.sleep(0.03)
+                # Stream the response and collect sources
+                rag_sources = []
+                async for chunk in result_stream:
+                    if isinstance(chunk, dict) and chunk.get("type") == "sources":
+                        rag_sources = chunk.get("sources", [])
+                    else:
+                        yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
                 
                 # Send sources
-                sources = [
+                sources = injected_sources + [
                     {
-                        "id": s.id,
+                        "id": str(s.id),
                         "content": s.content[:100] + "..." if len(s.content) > 100 else s.content,
-                        "source_type": s.source_type,
-                        "url": s.url,
+                        "source_type": getattr(s, 'source_type', 'unknown'),
+                        "url": getattr(s, 'url', None),
                     }
-                    for s in result.sources[:5]
+                    for s in rag_sources[:5]
                 ]
-                yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+                
+                # Deduplicate sources by ID
+                unique_sources = []
+                seen_ids = set()
+                for s in sources:
+                    if s["id"] not in seen_ids:
+                        seen_ids.add(s["id"])
+                        unique_sources.append(s)
+                
+                yield f"data: {json.dumps({'type': 'sources', 'sources': unique_sources[:6]})}\n\n"
             
             # Done
             yield f"data: {json.dumps({'type': 'done'})}\n\n"

@@ -73,3 +73,54 @@
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* ─── Pipeline Progress Bar Animations ─── */
+
+/* Gradient fill for the active progress bar */
+.progress-bar-fill {
+  background: linear-gradient(90deg, #10b981 0%, #34d399 40%, #06b6d4 100%);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4), 0 0 4px rgba(16, 185, 129, 0.6);
+}
+
+/* Sweeping shine effect across the progress bar */
+.progress-bar-shine {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.15) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: progress-shine 2s ease-in-out infinite;
+}
+
+@keyframes progress-shine {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Pulsing ambient glow behind the active pipeline bar */
+.pipeline-glow {
+  animation: pipeline-glow-pulse 3s ease-in-out infinite;
+}
+
+@keyframes pipeline-glow-pulse {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.3; }
+}
+
+/* Subtle entrance animation */
+.pipeline-active {
+  animation: pipeline-slide-in 0.4s ease-out;
+}
+
+@keyframes pipeline-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

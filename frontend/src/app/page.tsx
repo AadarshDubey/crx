@@ -9,6 +9,7 @@ import { SentimentGauge } from "@/components/sentiment-gauge";
 import { CoinsPanel } from "@/components/coins-panel";
 import { LatestArticles } from "@/components/latest-articles";
 import { RecentTweets } from "@/components/tweet-card";
+import { PipelineProgress } from "@/components/pipeline-progress";
 import { tweetsApi, pricesApi, newsApi, schedulerApi } from "@/lib/api";
 import { MessageSquare, TrendingUp, TrendingDown, Users, Gauge, Download } from "lucide-react";
 
@@ -224,6 +225,9 @@ export default function DashboardPage() {
         </Button>
       </Header>
 
+      {/* Pipeline Progress Bar */}
+      <PipelineProgress />
+
       <div className="p-6 space-y-6">
         {/* Stats Cards */}
         {statsLoading ? (
@@ -250,7 +254,7 @@ export default function DashboardPage() {
             <StatsCard
               title="Bearish"
               value={`${displayStats.bearish_percentage}%`}
-              change={displayStats.sentiment_change ? -displayStats.sentiment_change : undefined}
+              change={displayStats.bearish_change !== undefined ? displayStats.bearish_change : (displayStats.sentiment_change ? -displayStats.sentiment_change : undefined)}
               subtitle={displayStats.neutral_percentage > 0 ? `Neutral: ${displayStats.neutral_percentage}%` : undefined}
               icon={<TrendingDown size={20} />}
             />
@@ -283,6 +287,7 @@ export default function DashboardPage() {
                 <SentimentGauge
                   bullish={displayStats.bullish_percentage}
                   bearish={displayStats.bearish_percentage}
+                  neutral={displayStats.neutral_percentage}
                   className="p-0 shadow-none border-0 bg-transparent"
                 />
               </div>

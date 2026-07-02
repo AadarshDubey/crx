@@ -480,7 +480,7 @@ class CoinGeckoService:
                 "symbol": coin.get("symbol", "").upper(),
                 "name": coin.get("name"),
                 "current_price": coin.get("current_price", 0),
-                "price_change_percentage_24h": round(coin.get("price_change_percentage_24h", 0), 2),
+                "price_change_percentage_24h": round(coin.get("price_change_percentage_24h") or 0, 2),
                 "market_cap_rank": coin.get("market_cap_rank"),
                 "image": coin.get("image"),
             })
@@ -523,7 +523,7 @@ class CoinGeckoService:
                 "symbol": coin.get("symbol", "").upper(),
                 "name": coin.get("name"),
                 "current_price": coin.get("current_price", 0),
-                "price_change_percentage_24h": round(coin.get("price_change_percentage_24h", 0), 2),
+                "price_change_percentage_24h": round(coin.get("price_change_percentage_24h") or 0, 2),
                 "market_cap_rank": coin.get("market_cap_rank"),
                 "image": coin.get("image"),
             })

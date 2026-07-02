@@ -83,7 +83,7 @@ class RedisCache:
                 cursor, keys = await self._redis.scan(cursor, match=pattern, count=100)
                 if keys:
                     await self._redis.delete(*keys)
-                if cursor == 0:
+                if int(cursor) == 0:
                     break
             logger.info(f"Cache invalidated: {pattern}")
         except Exception as e:

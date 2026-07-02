@@ -175,12 +175,17 @@ async def scrape_news(
         # Scrape each source
         for src in sources_to_scrape:
             items = await news_scraper.scrape(target=src, max_articles=max_articles)
+            
+            # Pre-fetch existing article URLs to avoid N+1 queries
+            item_urls = [item.url for item in items if item.url]
+            existing_urls = set()
+            if item_urls:
+                existing_result = await db.execute(select(NewsArticle.url).where(NewsArticle.url.in_(item_urls)))
+                existing_urls = set(existing_result.scalars().all())
+                
             for item in items:
                 # Check if article already exists (by URL or ID)
-                existing = await db.execute(
-                    select(NewsArticle.id).where(NewsArticle.url == item.url)
-                )
-                if existing.scalar_one_or_none():
+                if item.url in existing_urls:
                     continue  # Skip duplicates
                 
                 # Create new article record

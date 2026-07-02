@@ -96,7 +96,7 @@ export function SentimentGauge({
         </div>
         <div className="p-2 rounded-lg bg-neutral/10 border border-neutral/20">
           <div className="text-xs text-neutral mb-1">Neutral</div>
-          <div className="text-lg font-bold text-white max-w-full overflow-hidden text-ellipsis">{Math.round(100 - bullish - bearish)}%</div>
+          <div className="text-lg font-bold text-white max-w-full overflow-hidden text-ellipsis">{neutral}%</div>
         </div>
         <div className="p-2 rounded-lg bg-bullish/10 border border-bullish/20">
           <div className="text-xs text-bullish mb-1">Bullish</div>

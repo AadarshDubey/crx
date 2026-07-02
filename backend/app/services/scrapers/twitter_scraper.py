@@ -101,7 +101,11 @@ class TwitterScraper(BaseScraper):
         self.logger.info(f"Fetching timeline for @{handle} (timestamp: {params['_']})")
         response = await client.get(timeline_url, headers=headers, params=params)
         response.raise_for_status()
-        data = response.json()
+        
+        try:
+            data = response.json()
+        except Exception as e:
+            raise Exception(f"Failed to parse RapidAPI response as JSON. Error: {e}. Body snippet: {response.text[:200]}")
         
         self.logger.info(f"RapidAPI response status: {data.get('status')}, timeline items: {len(data.get('timeline', []))}")
         

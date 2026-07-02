@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = "./chroma_db"
     
     # Scraping Config
-    SCRAPE_INTERVAL_MINUTES: int = 15
+    SCRAPE_INTERVAL_MINUTES: int = 60
     MAX_TWEETS_PER_ACCOUNT: int = 50
     
     # CORS

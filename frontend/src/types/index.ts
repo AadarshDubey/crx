@@ -171,6 +171,7 @@ export interface DashboardStats {
   tweets_24h: number;
   tweets_in_range?: number;
   sentiment_change: number;
+  bearish_change?: number;
 }
 
 // API Response types

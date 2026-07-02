@@ -8,8 +8,10 @@ interface Article {
   id: number;
   title: string;
   url: string;
-  source_id: string;
-  source_name: string;
+  source: {
+    id: string;
+    name: string;
+  };
   published_at: string;
   summary?: string;
   image_url?: string;
@@ -45,11 +47,11 @@ function ArticleCard({ article }: { article: Article }) {
       className="block p-3 rounded-lg bg-card-hover/50 hover:bg-card-hover transition-colors group"
     >
       <div className="flex items-start gap-3">
-        <div className={`w-1 h-full min-h-[60px] rounded-full ${getSourceColor(article.source_id)}`} />
+        <div className={`w-1 h-full min-h-[60px] rounded-full ${getSourceColor(article.source?.id)}`} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className={`text-xs px-2 py-0.5 rounded-full ${getSourceColor(article.source_id)} text-white`}>
-              {article.source_name || article.source_id}
+            <span className={`text-xs px-2 py-0.5 rounded-full ${getSourceColor(article.source?.id)} text-white`}>
+              {article.source?.name || article.source?.id}
             </span>
             {article.category && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-card-hover text-muted">

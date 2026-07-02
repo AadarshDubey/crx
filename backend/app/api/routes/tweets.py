@@ -179,10 +179,14 @@ async def get_dashboard_stats(
     prev_result = await db.execute(prev_sentiment_query)
     prev_counts = {row[0]: row[1] for row in prev_result.all()}
     prev_total = sum(prev_counts.values()) or 1
+    
     prev_bullish = prev_counts.get("positive", 0) + prev_counts.get("bullish", 0)
     prev_bullish_pct = (prev_bullish / prev_total) * 100
-    
     sentiment_change = round(bullish_pct - prev_bullish_pct, 1)
+    
+    prev_bearish = prev_counts.get("negative", 0) + prev_counts.get("bearish", 0)
+    prev_bearish_pct = (prev_bearish / prev_total) * 100
+    bearish_change = round(bearish_pct - prev_bearish_pct, 1)
     
     response = {
         "total_tweets": total_tweets,
@@ -192,6 +196,7 @@ async def get_dashboard_stats(
         "neutral_percentage": neutral_pct,
         "tracked_accounts": tracked_accounts,
         "sentiment_change": sentiment_change,
+        "bearish_change": bearish_change,
         "time_range": time_range,
     }
     
@@ -417,12 +422,16 @@ async def scrape_single_account(
             include_retweets=account.scrape_retweets,
         )
         
+        # Pre-fetch existing tweet IDs to avoid N+1 queries
+        item_ids = [item.id for item in scraped_items]
+        existing_result = await db.execute(select(Tweet.id).where(Tweet.id.in_(item_ids)))
+        existing_ids = set(existing_result.scalars().all())
+
         # Store tweets in database
         tweets_stored = 0
         for item in scraped_items:
             # Check if tweet already exists
-            existing = await db.execute(select(Tweet.id).where(Tweet.id == item.id))
-            if existing.scalar_one_or_none():
+            if item.id in existing_ids:
                 continue
             
             # Create tweet record
@@ -571,10 +580,16 @@ async def scrape_tweets(
         tweets_stored = 0
         tweets_to_embed = []
         
+        # Pre-fetch existing tweet IDs to avoid N+1 queries
+        item_ids = [item.id for item in filtered_items]
+        existing_ids = set()
+        if item_ids:
+            existing_result = await db.execute(select(Tweet.id).where(Tweet.id.in_(item_ids)))
+            existing_ids = set(existing_result.scalars().all())
+        
         for item in filtered_items:
             # Check if tweet already exists
-            existing = await db.execute(select(Tweet.id).where(Tweet.id == item.id))
-            if existing.scalar_one_or_none():
+            if item.id in existing_ids:
                 continue
             
             # Create tweet record

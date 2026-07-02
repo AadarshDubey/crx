@@ -16,7 +16,7 @@ import {
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/feed", label: "Intel Feed", icon: Rss },
-  { href: "/chat", label: "AI Oracle", icon: MessageSquare },
+  { href: "/chat", label: "AI Bot", icon: MessageSquare },
   { href: "/analytics", label: "Deep Analytics", icon: BarChart3 },
   { href: "/accounts", label: "Watchlist", icon: Users },
 ];
@@ -43,7 +43,6 @@ export function Sidebar({ className, onClose }: SidebarProps) {
           </div>
           <div>
             <h1 className="text-xl font-bold font-heading text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70 tracking-tight">CRX Pipeline</h1>
-            <p className="text-[10px] font-mono text-primary uppercase tracking-widest">Sentinel v2.0</p>
           </div>
         </div>
 
@@ -74,20 +73,6 @@ export function Sidebar({ className, onClose }: SidebarProps) {
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="px-6 py-6 border-t border-white/5">
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-bullish/10 to-transparent border border-bullish/20">
-            <div className="relative">
-              <div className="w-2 h-2 rounded-full bg-bullish animate-pulse" />
-              <div className="absolute inset-0 w-2 h-2 rounded-full bg-bullish animate-ping opacity-75" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-bullish tracking-wider">SYSTEM ONLINE</span>
-              <span className="text-[10px] text-text-muted font-mono">Latency: 12ms</span>
-            </div>
-            <Zap className="ml-auto w-4 h-4 text-bullish opacity-50" />
-          </div>
-        </div>
       </div>
     </aside>
   );

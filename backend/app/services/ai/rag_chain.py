@@ -1,4 +1,4 @@
-from typing import List, Optional, AsyncGenerator
+from typing import List, Optional, AsyncGenerator, Any
 from openai import AsyncOpenAI
 from groq import AsyncGroq
 from pydantic import BaseModel
@@ -76,7 +76,7 @@ class RAGChain:
     _cache_timestamp: datetime = None
     _cache_ttl_seconds: int = 300  # 5 minutes cache
     
-    SYSTEM_PROMPT = """You are an expert crypto market analyst with access to real-time tweets, news articles, and price data from key figures in the cryptocurrency space.
+    SYSTEM_PROMPT = """You are an expert crypto market analyst and helpful AI assistant with access to real-time tweets, news articles, and price data from key figures in the cryptocurrency space.
 
 Your capabilities:
 - Analyze sentiment and tone from tweets and news
@@ -85,6 +85,7 @@ Your capabilities:
 - Connect statements to broader market context
 
 Guidelines:
+- If the user is just saying hello, greeting you, or making a casual conversational remark, respond naturally and conversationally (e.g., "Hi! I am your Crypto Pulse assistant. What crypto news, tweets, or market trends would you like to know about today?"). Do not force a news analysis for simple greetings.
 - When analyzing a specific person's content, focus on THEIR actual words and statements
 - Identify the overall sentiment (bullish/bearish/neutral) with specific evidence
 - Highlight key themes and topics they're discussing
@@ -93,7 +94,7 @@ Guidelines:
 - Be specific - quote or paraphrase their actual statements
 - If context is limited, acknowledge what you have and what's missing"""
 
-    RAG_PROMPT = """Based on the following content, provide a sophisticated analysis for the user's question.
+    RAG_PROMPT = """Based on the following content, provide a sophisticated analysis for the user's question. If the user is just saying hello or greeting you, simply respond conversationally without doing any analysis.
 
 {person_context}Context (tweets and news):
 {context}
@@ -103,9 +104,9 @@ Guidelines:
 User Question: {question}
 
 Provide a thoughtful, well-structured response that:
-1. Directly addresses what was asked
+1. Directly addresses what was asked (if it's a greeting, just say hello back naturally)
 2. References specific content from the sources when relevant
-3. Analyzes sentiment and potential market implications
+3. Analyzes sentiment and potential market implications (only if asked about crypto/markets)
 4. Is clear and professional in tone
 
 If analyzing a specific person's tweets, structure your response as:
@@ -178,22 +179,49 @@ Focus on their direct statements and what they reveal about their views on the m
             print(f"Warning: Could not fetch tracked accounts: {e}")
             return RAGChain._tracked_accounts_cache or []
     
+    # Cache for vector DB sources (refreshed periodically)
+    _sources_cache: List[str] = []
+    _sources_cache_timestamp: datetime = None
+    _sources_cache_ttl_seconds: int = 300  # 5 minutes
+
     def _get_sources_from_vectordb(self) -> List[str]:
-        """Get unique sources from the vector database."""
+        """Get unique sources from the vector database (cached, 5-min TTL)."""
+        now = datetime.utcnow()
+        
+        # Return cached sources if still valid
+        if (RAGChain._sources_cache_timestamp and
+            RAGChain._sources_cache and
+            (now - RAGChain._sources_cache_timestamp).total_seconds() < RAGChain._sources_cache_ttl_seconds):
+            return RAGChain._sources_cache
+        
         try:
-            # Get all unique sources from ChromaDB
+            # Only fetch IDs and metadatas — much lighter than full get()
             collection = self.vector_store.collection
-            results = collection.get(include=["metadatas"])
+            # Use peek with a reasonable limit instead of dumping everything
+            count = collection.count()
+            if count == 0:
+                RAGChain._sources_cache = []
+                RAGChain._sources_cache_timestamp = now
+                return []
+            
+            # Sample up to 500 recent documents to find sources
+            # This is dramatically cheaper than loading all documents
+            results = collection.get(
+                limit=min(count, 500),
+                include=["metadatas"],
+            )
             
             sources = set()
             for meta in results.get("metadatas", []):
                 if meta and "source" in meta:
                     sources.add(meta["source"])
             
-            return list(sources)
+            RAGChain._sources_cache = list(sources)
+            RAGChain._sources_cache_timestamp = now
+            return RAGChain._sources_cache
         except Exception as e:
             print(f"Warning: Could not fetch sources from vector DB: {e}")
-            return []
+            return RAGChain._sources_cache or []
     
     async def _extract_mentioned_accounts(self, question: str) -> List[dict]:
         """
@@ -482,19 +510,18 @@ Focus on their direct statements and what they reveal about their views on the m
     async def query(
         self, 
         question: str,
-        conversation_history: Optional[List[dict]] = None,
-        filter_type: Optional[str] = None,  # "tweets", "news", or None for all
+        conversation_history: List[dict] = None,
+        filter_type: str = None,
+        injected_context: str = None
     ) -> RAGResponse:
         """
-        Answer a question using RAG.
+        Query the RAG chain with a question.
         
         Args:
-            question: User's question
-            conversation_history: Previous messages for context
-            filter_type: Filter to specific content type
-            
-        Returns:
-            RAGResponse with answer and sources
+            question: The user's question
+            conversation_history: Optional history of previous messages
+            filter_type: Optional source type filter ('tweet' or 'news')
+            injected_context: Optional pre-fetched context to include
         """
         # Step 1: Embed the question
         query_embedding = await embedding_service.embed_for_search(question)
@@ -558,6 +585,8 @@ Focus on their direct statements and what they reveal about their views on the m
         
         # Step 3: Format context
         context = self._format_context(documents)
+        if injected_context:
+            context = injected_context + "\n\n" + context
         
         # Step 3.5: Check if this is a price query and fetch price data
         price_context = ""
@@ -626,7 +655,9 @@ Focus on their direct statements and what they reveal about their views on the m
         self, 
         question: str,
         conversation_history: Optional[List[dict]] = None,
-    ) -> AsyncGenerator[str, None]:
+        filter_type: str = None,
+        injected_context: str = None,
+    ) -> AsyncGenerator[Any, None]:
         """
         Stream RAG response for better UX.
         
@@ -666,18 +697,26 @@ Focus on their direct statements and what they reveal about their views on the m
             general_docs = await self.vector_store.search(
                 query_embedding=query_embedding,
                 top_k=5,
+                filter_metadata={"type": filter_type} if filter_type else None,
             )
             existing_ids = {d["id"] for d in documents}
             for doc in general_docs:
                 if doc["id"] not in existing_ids:
                     documents.append(doc)
         else:
+            filter_metadata = None
+            if filter_type:
+                filter_metadata = {"type": filter_type}
+                
             documents = await self.vector_store.search(
                 query_embedding=query_embedding,
                 top_k=self.top_k,
+                filter_metadata=filter_metadata,
             )
         
         context = self._format_context(documents)
+        if injected_context:
+            context = injected_context + "\n\n" + context
         
         # Check if this is a price query
         price_context = ""
@@ -708,38 +747,95 @@ Focus on their direct statements and what they reveal about their views on the m
             async for chunk in stream:
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
+            
+            # Format and yield sources at the end
+            sources = [
+                Source(
+                    id=doc["id"],
+                    content=doc["content"][:200] + "..." if len(doc["content"]) > 200 else doc["content"],
+                    source_type=doc.get("metadata", {}).get("type", "unknown"),
+                    url=doc.get("metadata", {}).get("url"),
+                    relevance_score=1 - doc.get("distance", 0),
+                )
+                for doc in documents
+            ]
+            yield {"type": "sources", "sources": sources}
                     
         except Exception as e:
             yield f"Error: {str(e)}"
     
     def _format_context(self, documents: List[dict]) -> str:
-        """Format retrieved documents as context for the LLM."""
+        """
+        Format retrieved documents as context for the LLM.
+
+        Handles chunked documents: multiple chunks from the same parent
+        article are merged back into a single context block (ordered by
+        chunk_index) so the LLM sees coherent, de-duplicated content.
+        """
         if not documents:
             return "No relevant context found."
-        
-        formatted_docs = []
-        for i, doc in enumerate(documents, 1):
-            content = doc.get("content", "")[:500]  # Limit per document
+
+        # --- De-duplicate chunks back to their parent ---
+        # Key: parent_id (or doc id for tweets which have no parent_id)
+        # Value: dict with metadata + list of (chunk_index, text) tuples
+        parent_map: dict = {}
+
+        for doc in documents:
             metadata = doc.get("metadata", {})
-            source_type = metadata.get("type", "unknown")
+            doc_id = doc.get("id", "")
+            content = doc.get("content", "")
+
+            # For chunked news: parent_id stored in metadata
+            # For tweets: no parent_id, use doc id itself
+            parent_id = metadata.get("parent_id") or doc_id
+
+            chunk_index = metadata.get("chunk_index", 0)
+
+            if parent_id not in parent_map:
+                parent_map[parent_id] = {
+                    "metadata": metadata,
+                    "chunks": [],
+                    "doc_id": doc_id,
+                }
+            parent_map[parent_id]["chunks"].append((chunk_index, content))
+
+        # --- Format each parent as a single block ---
+        formatted_docs = []
+        for pos, (parent_id, entry) in enumerate(parent_map.items(), 1):
+            metadata = entry["metadata"]
+            source_type = metadata.get("type", metadata.get("source_type", "unknown"))
             source = metadata.get("source", "")
+            source_name = metadata.get("source_name", "")
+            title = metadata.get("title", "")
             created_at = metadata.get("created_at", "")
-            
-            # Format date if available
+
+            # Format date
             date_str = ""
             if created_at:
                 try:
                     if isinstance(created_at, str):
-                        # Parse and format date
                         dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
                         date_str = f" [{dt.strftime('%b %d, %Y %H:%M')}]"
-                except:
+                except Exception:
                     date_str = f" [{created_at}]"
-            
-            formatted_docs.append(
-                f"[{i}] ({source_type}) {source}{date_str}\n{content}"
-            )
-        
+
+            # Sort and merge chunks
+            sorted_chunks = sorted(entry["chunks"], key=lambda x: x[0])
+            merged_text = " ".join(text for _, text in sorted_chunks)
+            # Trim to keep context window manageable (500 chars for news, full for tweets)
+            if source_type == "news":
+                merged_text = merged_text[:800]
+            else:
+                merged_text = merged_text[:500]
+
+            # Build header line
+            if source_type == "news" and title:
+                header = f"[{pos}] (news) {source_name or source}{date_str} — \"{title}\""
+            else:
+                header = f"[{pos}] ({source_type}) {source}{date_str}"
+
+            formatted_docs.append(f"{header}\n{merged_text}")
+
         return "\n\n".join(formatted_docs)
     
     async def get_topic_summary(self, topic: str) -> dict:

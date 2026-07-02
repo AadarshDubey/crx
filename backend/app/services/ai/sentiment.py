@@ -100,12 +100,119 @@ Respond with a JSON object:
             return self._fallback_analysis(text)
     
     async def analyze_batch(self, texts: List[str]) -> List[SentimentResult]:
-        """Analyze sentiment of multiple texts."""
+        """Analyze sentiment of multiple texts (sequential, legacy)."""
         results = []
         for text in texts:
             result = await self.analyze(text)
             results.append(result)
         return results
+    
+    async def analyze_batch_efficient(self, texts: List[str], batch_size: int = 25) -> List[SentimentResult]:
+        """
+        Analyze sentiment of multiple texts using batched LLM calls.
+        
+        Instead of 1 API call per text, sends up to batch_size texts per call.
+        Falls back to keyword-based analysis for any items that fail.
+        
+        Args:
+            texts: List of texts to analyze
+            batch_size: Max texts per LLM call (default 25, tuned for context limits)
+        
+        Returns:
+            List of SentimentResult, one per input text (order preserved)
+        """
+        if not texts:
+            return []
+        
+        all_results: List[SentimentResult] = []
+        
+        # Process in batches
+        for batch_start in range(0, len(texts), batch_size):
+            batch = texts[batch_start:batch_start + batch_size]
+            
+            # Filter out texts too short for analysis
+            indexable_batch = []
+            batch_results = [None] * len(batch)
+            
+            for i, text in enumerate(batch):
+                if not text or len(text.strip()) < 10:
+                    batch_results[i] = SentimentResult(
+                        label="neutral", score=0.5, confidence=0.0,
+                        reasoning="Text too short for analysis"
+                    )
+                else:
+                    indexable_batch.append((i, text[:500]))  # Truncate per text to fit context
+            
+            if not indexable_batch:
+                all_results.extend(batch_results)
+                continue
+            
+            # Build numbered list prompt
+            numbered_texts = "\n".join(
+                f"[{idx+1}] {text}" for idx, (_, text) in enumerate(indexable_batch)
+            )
+            
+            batch_prompt = f"""Analyze the sentiment of each numbered text below regarding cryptocurrency markets.
+For each text, determine if it's positive (bullish), negative (bearish), or neutral.
+
+Texts:
+{numbered_texts}
+
+Respond with a JSON object containing a "results" array with exactly {len(indexable_batch)} items, one per text in order:
+{{
+    "results": [
+        {{"label": "positive"|"negative"|"neutral", "score": <float 0.0-1.0>, "confidence": <float 0.0-1.0>}},
+        ...
+    ]
+}}"""
+            
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a precise crypto sentiment analyzer. Always respond with valid JSON."
+                        },
+                        {
+                            "role": "user",
+                            "content": batch_prompt
+                        }
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.1,
+                    max_tokens=100 + len(indexable_batch) * 80,  # Scale tokens with batch size
+                )
+                
+                result_data = json.loads(response.choices[0].message.content)
+                results_list = result_data.get("results", [])
+                
+                # Map results back to their original positions
+                for j, (orig_idx, _) in enumerate(indexable_batch):
+                    if j < len(results_list):
+                        r = results_list[j]
+                        batch_results[orig_idx] = SentimentResult(
+                            label=r.get("label", "neutral"),
+                            score=float(r.get("score", 0.5)),
+                            confidence=float(r.get("confidence", 0.5)),
+                        )
+                    else:
+                        # LLM returned fewer results than expected
+                        batch_results[orig_idx] = self._fallback_analysis(indexable_batch[j][1])
+                
+            except Exception as e:
+                # Batch failed — fall back to keyword analysis for all items in this batch
+                for orig_idx, text in indexable_batch:
+                    batch_results[orig_idx] = self._fallback_analysis(text)
+            
+            # Fill any remaining None slots (shouldn't happen, but safety net)
+            for i in range(len(batch_results)):
+                if batch_results[i] is None:
+                    batch_results[i] = SentimentResult(label="neutral", score=0.5, confidence=0.0)
+            
+            all_results.extend(batch_results)
+        
+        return all_results
     
     def _fallback_analysis(self, text: str) -> SentimentResult:
         """Simple keyword-based fallback when API fails."""
