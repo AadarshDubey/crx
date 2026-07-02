@@ -644,24 +644,7 @@ class ScraperScheduler:
             logger.info("Warming cache after pipeline...")
             
             async with async_session() as db:
-                # Warm tweets:stats:24h
-                since_24h = datetime.utcnow() - timedelta(hours=24)
-                
-                total_result = await db.execute(select(func.count(Tweet.id)))
-                total_tweets = total_result.scalar() or 0
-                
-                range_result = await db.execute(
-                    select(func.count(Tweet.id)).where(Tweet.tweet_created_at >= since_24h)
-                )
-                tweets_24h = range_result.scalar() or 0
-                
-                stats_data = {
-                    "total_tweets": total_tweets,
-                    "tweets_24h": tweets_24h,
-                    "time_range": "24h",
-                }
-                await cache.set("tweets:stats:24h", stats_data, ttl=120)
-                
+
                 # Warm tweets:recent:5
                 recent_result = await db.execute(
                     select(Tweet).order_by(desc(Tweet.tweet_created_at)).limit(5)
